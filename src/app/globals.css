@@ -1,0 +1,26 @@
+@import "tailwindcss";
+
+body {
+  background: #fff;
+  color: #111;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+@utility input {
+  @apply w-full rounded-lg border border-neutral-300 bg-white px-3 py-3 text-base outline-none focus:border-neutral-900 focus:ring-2 focus:ring-neutral-200;
+}
+@utility label {
+  @apply mb-1 block text-sm font-medium text-neutral-700;
+}
+@utility btn {
+  @apply inline-flex min-h-12 items-center justify-center gap-2 rounded-lg px-5 text-base font-semibold disabled:opacity-50;
+}
+@utility btn-primary {
+  @apply btn bg-neutral-900 text-white active:bg-neutral-700;
+}
+@utility btn-secondary {
+  @apply btn border border-neutral-300 bg-white text-neutral-900 active:bg-neutral-100;
+}
+@utility card {
+  @apply rounded-xl border border-neutral-300 p-4;
+}
