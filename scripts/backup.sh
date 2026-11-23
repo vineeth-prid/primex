@@ -11,7 +11,7 @@ mkdir -p "$DEST/minio"
 docker compose exec -T db pg_dump -U "$POSTGRES_USER" -Fc "$POSTGRES_DB" > "$DEST/db-$STAMP.dump"
 
 # Mirror the bucket's files (incremental) from the MinIO volume.
-docker run --rm -v "$(basename "$PWD")_miniodata:/data:ro" -v "$PWD/backups/minio:/out" alpine \
+docker run --rm -v "primex_miniodata:/data:ro" -v "$PWD/backups/minio:/out" alpine \
   sh -c 'cp -au /data/. /out/'
 
 # Keep 30 days of database dumps.

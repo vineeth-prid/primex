@@ -38,14 +38,22 @@ node --env-file=.env.local scripts/smoke-test.mjs http://localhost:3000
 
 ## Production (single VPS)
 
+**Live deployment:** `/opt/primex` on the shared VPS, behind the host nginx (`deploy/nginx-host.conf` → `/etc/nginx/sites-available/primex.theprid.com`, TLS via `certbot --nginx`). Update with:
+```bash
+cd /opt/primex && git pull && docker compose up -d --build && docker image prune -f
+```
+Containers: `primex-app-1` (127.0.0.1:3090), `primex-db-1`, `primex-minio-1` — no other ports published; memory capped (1g / 512m / 512m).
+
+Fresh dedicated server (no existing web server) — use the bundled nginx:
+
 1. Install Docker + Compose. Point the DNS A record for `DOMAIN` at the VPS. Open only ports 80/443.
-2. `git clone` to `/opt/jobcard`, `cp .env.example .env`, fill every value (long random passwords; `openssl rand -base64 48` for `SESSION_SECRET`). `DATABASE_URL` must use the same user/password as `POSTGRES_*`.
+2. `git clone` to `/opt/primex`, `cp .env.example .env`, fill every value (long random passwords; `openssl rand -base64 48` for `SESSION_SECRET`). `DATABASE_URL` must use the same user/password as `POSTGRES_*`.
 3. First TLS certificate (before nginx starts):
    ```bash
    docker run --rm -p 80:80 -v /etc/letsencrypt:/etc/letsencrypt certbot/certbot certonly --standalone -d $DOMAIN --agree-tos -m you@example.com -n
    ```
    Renewal (cron, monthly): `docker run --rm -v /etc/letsencrypt:/etc/letsencrypt -v jobcard_certbot-www:/var/www/certbot certbot/certbot renew --webroot -w /var/www/certbot && docker compose exec nginx nginx -s reload`
-4. `docker compose up -d --build` — the app container applies migrations and creates the private bucket on every start.
+4. `docker compose --profile bundled-nginx up -d --build` — the app container applies migrations and creates the private bucket on every start.
 5. Create the two accounts (one admin, one staff), then delete the `*_PASSWORD` lines from `.env`:
    ```bash
    docker compose run --rm app node scripts/setup-users.mjs

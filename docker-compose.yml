@@ -1,4 +1,8 @@
-# Production: single VPS. Only nginx is exposed (80/443). Postgres and MinIO stay on the internal network.
+# Production on a single VPS. Postgres and MinIO are never published; the app listens on localhost only.
+# Behind an existing host nginx (shared server): `docker compose up -d` and proxy to 127.0.0.1:${APP_PORT}.
+# Dedicated server with no web server: `docker compose --profile bundled-nginx up -d` (uses nginx/ + certbot).
+name: primex
+
 x-logging: &logging
   driver: json-file
   options: { max-size: "10m", max-file: "5" }
@@ -8,6 +12,8 @@ services:
     build: .
     restart: unless-stopped
     env_file: .env
+    ports: ["127.0.0.1:${APP_PORT:-3090}:3000"]
+    mem_limit: 1g
     depends_on:
       db: { condition: service_healthy }
       minio: { condition: service_healthy }
@@ -21,6 +27,7 @@ services:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: ${POSTGRES_DB}
     volumes: [pgdata:/var/lib/postgresql/data]
+    mem_limit: 512m
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
       interval: 10s
@@ -28,6 +35,8 @@ services:
     logging: *logging
 
   minio:
+    # Uses MINIO_IMAGE if it already exists locally; otherwise builds the final community release from source.
+    image: ${MINIO_IMAGE:-primex-minio:RELEASE.2025-10-15T17-29-55Z}
     build: { context: ., dockerfile: minio.Dockerfile }
     restart: unless-stopped
     command: server /data
@@ -35,6 +44,7 @@ services:
       MINIO_ROOT_USER: ${S3_ACCESS_KEY}
       MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
     volumes: [miniodata:/data]
+    mem_limit: 512m
     healthcheck:
       test: ["CMD", "curl", "-fs", "http://127.0.0.1:9000/minio/health/live"]
       interval: 10s
@@ -42,6 +52,7 @@ services:
     logging: *logging
 
   nginx:
+    profiles: [bundled-nginx]
     image: nginx:1.27-alpine
     restart: unless-stopped
     ports: ["80:80", "443:443"]
