@@ -40,7 +40,8 @@ node --env-file=.env.local scripts/smoke-test.mjs http://localhost:3000
 
 **Live deployment:** `/opt/primex` on the shared VPS, behind the host nginx (`deploy/nginx-host.conf` → `/etc/nginx/sites-available/primex.theprid.com`, TLS via `certbot --nginx`). Update with:
 ```bash
-cd /opt/primex && git pull && docker compose up -d --build && docker image prune -f
+cd /opt/primex && ./scripts/backup.sh && git pull && docker compose up -d --build && docker builder prune -af
+# builds leave ~4 GB of cache; the VPS disk is ~82% full, so always prune after deploying
 ```
 Containers: `primex-app-1` (127.0.0.1:3090), `primex-db-1`, `primex-minio-1` — no other ports published; memory capped (1g / 512m / 512m).
 
