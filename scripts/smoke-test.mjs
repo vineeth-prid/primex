@@ -26,7 +26,8 @@ function checkinForm(over = {}, lang = "en") {
   const fd = new FormData();
   fd.set("data", JSON.stringify({
     clientRef: randomUUID(), customerName: lang === "ar" ? "محمد الكعبي" : "Test Customer", mobile: "5555 1234",
-    plateNo: "123456", carModel: "Toyota Land Cruiser", address: "Doha", dateIn: "2026-11-23", timeIn: "09:30",
+    plateNo: "123456", carModel: "Toyota Land Cruiser", chassisNo: "jtmhv05j704123456", address: "Doha",
+    dateIn: "2026-11-23", deliveryDate: "2026-11-26", timeIn: "09:30",
     typeOfServices: "PPF Full Body", odometer: "45210", diagramMarks: [{ x: 0.5, y: 0.2 }, { x: 0.3, y: 0.55 }],
     fuelLevel: 2, conditions: { scratches: true, dents: true, other: "Faded headlight" },
     advisorNotes: "Swirl marks on bonnet.", workRequested: "Full PPF, ceramic coating on wheels.",
@@ -67,6 +68,15 @@ fake.append("photos", new Blob(["not an image"], { type: "image/jpeg" }), "x.jpg
 fake.set("signature", new Blob([sigPng], { type: "image/png" }), "sig.png");
 assert.equal((await call("/api/jobcards", "staff", { method: "POST", body: fake })).status, 400);
 
+// new fields: stored (chassis upper-cased), delivery date validated, chassis searchable
+const [saved] = await sql`select chassis_no, delivery_date::text d from job_cards where id = ${created.id}`;
+assert.equal(saved.chassis_no, "JTMHV05J704123456");
+assert.equal(saved.d, "2026-11-26");
+r = await call("/api/jobcards", "staff", { method: "POST", body: await withFiles(checkinForm({ deliveryDate: "2026-11-01" }), 0) });
+assert.equal(r.status, 400);
+assert.match((await r.json()).error, /Delivery Date/);
+assert.match(await (await call("/admin?q=JTMHV05J704", "admin")).text(), new RegExp(created.jobCardNumber));
+
 // PDF
 r = await call(`/api/jobcards/${created.id}/pdf`, "staff");
 assert.equal(r.headers.get("content-type"), "application/pdf");
@@ -88,6 +98,33 @@ const finalPdf = Buffer.from(await (await call(`/api/jobcards/${created.id}/pdf?
 const checkinAgain = Buffer.from(await (await call(`/api/jobcards/${created.id}/pdf?v=checkin`, "admin")).arrayBuffer());
 assert.ok(!finalPdf.equals(pdf1));
 assert.ok(checkinAgain.equals(pdf1), "signed check-in PDF must never change");
+
+// amendments: admin only, note required, photos optional; never touch the signed PDFs
+const amend = async (role, note, n) => {
+  const f = new FormData(); f.set("note", note);
+  for (let i = 0; i < n; i++) f.append("photos", new Blob([await img(i ? "#55a" : "#a55")], { type: "image/jpeg" }), `a${i}.jpg`);
+  return call(`/api/jobcards/${created.id}/amendments`, role, { method: "POST", body: f });
+};
+assert.equal((await amend("staff", "x", 0)).status, 403);
+assert.equal((await amend("admin", "  ", 0)).status, 400);
+assert.equal((await amend("admin", "Odometer typo: should read 45,120", 0)).status, 200);
+r = await amend("admin", "Scratch on rear bumper found after wash", 2);
+const a2 = await r.json();
+assert.equal(r.status, 200, JSON.stringify(a2));
+const aImgs = await sql`select id, image_key from job_card_images where amendment_id = ${a2.id} order by id`;
+assert.equal(aImgs.length, 2);
+assert.match(aImgs[0].image_key, /\/amendments\//);
+assert.equal((await call(`/api/jobcards/${created.id}/images/${aImgs[0].id}`, "admin")).headers.get("content-type"), "image/webp");
+assert.equal((await call(`/api/jobcards/${created.id}/images/${aImgs[0].id}`, "staff")).status, 403);
+const fake2 = new FormData(); fake2.set("note", "bad photo"); fake2.append("photos", new Blob(["nope"], { type: "image/jpeg" }), "x.jpg");
+assert.equal((await call(`/api/jobcards/${created.id}/amendments`, "admin", { method: "POST", body: fake2 })).status, 400);
+const page = await (await call(`/admin/jobcards/${created.id}`, "admin")).text();
+assert.match(page, /Scratch on rear bumper/);
+assert.match(page, /Amendment photo 2/);
+assert.match(page, /JTMHV05J704123456/);
+const checkinAfter = Buffer.from(await (await call(`/api/jobcards/${created.id}/pdf?v=checkin`, "admin")).arrayBuffer());
+assert.ok(checkinAfter.equals(pdf1), "amendments must not change the signed PDF");
+await assert.rejects(sql`delete from job_card_images where id = ${aImgs[0].id}`, /append-only/);
 
 // DB-level immutability
 await assert.rejects(sql`update job_cards set customer_name = 'X' where id = ${created.id}`, /immutable/);

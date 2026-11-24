@@ -35,9 +35,11 @@ export const jobCards = pgTable(
     mobile: text().notNull(),
     plateNo: text().notNull(),
     carModel: text().notNull(),
+    chassisNo: text(),
     address: text(),
     // Right box
     dateIn: date().notNull(),
+    deliveryDate: date(), // expected delivery date promised at check-in
     timeIn: text().notNull(), // HH:MM as written on the card
     typeOfServices: text(),
     odometer: integer(),
@@ -80,16 +82,9 @@ export const jobCards = pgTable(
     index("job_cards_mobile_trgm").using("gin", sql`${t.mobile} gin_trgm_ops`),
     index("job_cards_plate_trgm").using("gin", sql`${t.plateNo} gin_trgm_ops`),
     index("job_cards_number_trgm").using("gin", sql`${t.jobCardNumber} gin_trgm_ops`),
+    index("job_cards_chassis_trgm").using("gin", sql`${t.chassisNo} gin_trgm_ops`),
   ],
 );
-
-export const jobCardImages = pgTable("job_card_images", {
-  id: serial().primaryKey(),
-  jobCardId: integer().notNull().references(() => jobCards.id),
-  imageKey: text().notNull(),
-  imageType: text({ enum: ["before"] }).notNull().default("before"),
-  createdAt: now(),
-}, (t) => [index("job_card_images_card_idx").on(t.jobCardId)]);
 
 // Controlled corrections: signed data is never edited, corrections are appended here.
 export const amendments = pgTable("amendments", {
@@ -99,5 +94,15 @@ export const amendments = pgTable("amendments", {
   createdBy: integer().notNull().references(() => users.id),
   createdAt: now(),
 }, (t) => [index("amendments_card_idx").on(t.jobCardId)]);
+
+// "before" = check-in photos (in the PDF); "amendment" = optional photos attached to an amendment.
+export const jobCardImages = pgTable("job_card_images", {
+  id: serial().primaryKey(),
+  jobCardId: integer().notNull().references(() => jobCards.id),
+  imageKey: text().notNull(),
+  imageType: text({ enum: ["before", "amendment"] }).notNull().default("before"),
+  amendmentId: integer().references(() => amendments.id),
+  createdAt: now(),
+}, (t) => [index("job_card_images_card_idx").on(t.jobCardId)]);
 
 export type JobCard = typeof jobCards.$inferSelect;

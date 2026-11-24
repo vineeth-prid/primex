@@ -3,7 +3,7 @@ import { createHash } from "node:crypto";
 import { and, count, desc, eq, gte, ilike, lt, or, sql, type SQL } from "drizzle-orm";
 import sharp from "sharp";
 import { db } from "@/db";
-import { jobCardCounters, jobCardImages, jobCards, type Conditions, type JobCard, type Mark } from "@/db/schema";
+import { amendments, jobCardCounters, jobCardImages, jobCards, type Conditions, type JobCard, type Mark } from "@/db/schema";
 import { renderJobCardPdf } from "./pdf";
 import { deleteObjects, getObject, putObject } from "./storage";
 import { CONDITIONS, TERMS_VERSION } from "./terms";
@@ -36,6 +36,9 @@ export function parseCheckin(raw: Record<string, unknown>) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(dateIn)) throw new InputError("Date In is invalid");
   const timeIn = req(raw.timeIn, 5, "Time Car In");
   if (!/^\d{2}:\d{2}$/.test(timeIn)) throw new InputError("Time Car In is invalid");
+  const deliveryDate = str(raw.deliveryDate, 10, "Delivery Date");
+  if (deliveryDate && !/^\d{4}-\d{2}-\d{2}$/.test(deliveryDate)) throw new InputError("Delivery Date is invalid");
+  if (deliveryDate && deliveryDate < dateIn) throw new InputError("Delivery Date cannot be before Date In");
   const odo = raw.odometer === "" || raw.odometer == null ? null : Number(raw.odometer);
   if (odo != null && (!Number.isInteger(odo) || odo < 0 || odo > 9_999_999)) throw new InputError("Odometer Reading is invalid");
   const fuel = raw.fuelLevel == null ? null : Number(raw.fuelLevel);
@@ -64,9 +67,11 @@ export function parseCheckin(raw: Record<string, unknown>) {
     mobile,
     plateNo: req(raw.plateNo, 20, "Plate No").toUpperCase(),
     carModel: req(raw.carModel, 80, "Car Model"),
+    chassisNo: str(raw.chassisNo, 40, "Chassis No")?.toUpperCase() ?? null,
     address: str(raw.address, 300, "Address"),
     dateIn,
     timeIn,
+    deliveryDate,
     typeOfServices: str(raw.typeOfServices, 300, "Type of Services"),
     odometer: odo,
     diagramMarks,
@@ -208,8 +213,32 @@ export async function getJobCard(id: number): Promise<JobCard | undefined> {
   return r;
 }
 
+/** Check-in ("before") photos only — these are the ones in the signed PDFs. */
 export const getImages = (id: number) =>
-  db.select().from(jobCardImages).where(eq(jobCardImages.jobCardId, id)).orderBy(jobCardImages.id);
+  db.select().from(jobCardImages)
+    .where(and(eq(jobCardImages.jobCardId, id), eq(jobCardImages.imageType, "before")))
+    .orderBy(jobCardImages.id);
+
+// ── Amendments (append-only; photos optional) ────────────────
+export async function createAmendment(jobCardId: number, note: string, photos: Buffer[], userId: number) {
+  const card = await getJobCard(jobCardId);
+  if (!card) throw new InputError("Job card not found");
+  const uploaded: string[] = [];
+  try {
+    return await db.transaction(async (tx) => {
+      const [a] = await tx.insert(amendments).values({ jobCardId, note, createdBy: userId }).returning({ id: amendments.id });
+      const keys = photos.map((_, i) => `job-card-${card.jobCardNumber}/amendments/${a.id}-${String(i + 1).padStart(2, "0")}.webp`);
+      for (let i = 0; i < photos.length; i++) { await putObject(keys[i], photos[i], "image/webp"); uploaded.push(keys[i]); }
+      if (keys.length) {
+        await tx.insert(jobCardImages).values(keys.map((imageKey) => ({ jobCardId, imageKey, imageType: "amendment" as const, amendmentId: a.id })));
+      }
+      return a;
+    });
+  } catch (e) {
+    await deleteObjects(uploaded).catch(() => {}); // no orphaned uploads on failure
+    throw e;
+  }
+}
 
 const local = (d: string) => sql`(${d}::date)::timestamp at time zone ${TZ}`;
 
@@ -219,7 +248,8 @@ export async function listJobCards(f: ListFilters) {
   const where: SQL[] = [];
   if (f.q) {
     const p = `%${f.q.replace(/[%_\\]/g, "\\$&")}%`;
-    where.push(or(ilike(jobCards.jobCardNumber, p), ilike(jobCards.customerName, p), ilike(jobCards.mobile, p), ilike(jobCards.plateNo, p))!);
+    where.push(or(ilike(jobCards.jobCardNumber, p), ilike(jobCards.customerName, p), ilike(jobCards.mobile, p),
+      ilike(jobCards.plateNo, p), ilike(jobCards.chassisNo, p))!);
   }
   const isDate = (s?: string) => !!s && /^\d{4}-\d{2}-\d{2}$/.test(s);
   if (isDate(f.from)) where.push(gte(jobCards.createdAt, local(f.from!)));
@@ -236,6 +266,7 @@ export async function listJobCards(f: ListFilters) {
       id: jobCards.id, jobCardNumber: jobCards.jobCardNumber, createdAt: jobCards.createdAt,
       customerName: jobCards.customerName, mobile: jobCards.mobile, plateNo: jobCards.plateNo,
       carModel: jobCards.carModel, receivedBy: jobCards.receivedBy, status: jobCards.status,
+      deliveryDate: jobCards.deliveryDate,
     }).from(jobCards).where(w).orderBy(desc(jobCards.createdAt)).limit(f.size).offset((f.page - 1) * f.size),
     db.select({ total: count() }).from(jobCards).where(w),
   ]);

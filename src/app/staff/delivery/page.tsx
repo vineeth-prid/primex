@@ -10,7 +10,7 @@ export default async function DeliverySearch({ searchParams }: PageProps<"/staff
     <main className="mx-auto max-w-3xl p-4">
       <h1 className="mb-4 text-xl font-semibold">Vehicle Delivery</h1>
       <form className="mb-4 flex gap-2">
-        <input className="input" name="q" defaultValue={q} placeholder="Plate No, Job Card No, mobile or name" autoFocus />
+        <input className="input" name="q" defaultValue={q} placeholder="Plate No, Chassis No, Job Card No, mobile or name" autoFocus />
         <button className="btn-primary">Search</button>
       </form>
       <p className="mb-2 text-sm text-neutral-500">Vehicles checked in, not yet delivered{q ? ` matching “${q}”` : " (latest 20)"}:</p>
@@ -20,7 +20,9 @@ export default async function DeliverySearch({ searchParams }: PageProps<"/staff
             <Link href={`/staff/delivery/${r.id}`} className="flex min-h-16 items-center justify-between gap-3 px-4 py-3 hover:bg-neutral-50">
               <span>
                 <span className="block font-semibold">{r.plateNo} · {r.carModel}</span>
-                <span className="block text-sm text-neutral-500">{r.jobCardNumber} · {r.customerName} · {r.mobile}</span>
+                <span className="block text-sm text-neutral-500">
+                  {r.jobCardNumber} · {r.customerName} · {r.mobile}{r.deliveryDate && <> · <strong>Due {r.deliveryDate}</strong></>}
+                </span>
               </span>
               <span aria-hidden>›</span>
             </Link>

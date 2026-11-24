@@ -30,7 +30,7 @@ export default async function AdminPage({ searchParams }: PageProps<"/admin">) {
       </div>
 
       <form className="mb-4 grid gap-3 md:grid-cols-[2fr_1fr_1fr_1fr_1fr_auto]">
-        <input className="input" name="q" defaultValue={filters.q} placeholder="Job card no, customer, mobile or plate" />
+        <input className="input" name="q" defaultValue={filters.q} placeholder="Job card no, customer, mobile, plate or chassis" />
         <label className="block"><span className="sr-only">From</span><input className="input" type="date" name="from" defaultValue={filters.from} title="From date" /></label>
         <label className="block"><span className="sr-only">To</span><input className="input" type="date" name="to" defaultValue={filters.to} title="To date" /></label>
         <label className="block"><span className="sr-only">Month</span><input className="input" type="month" name="month" defaultValue={filters.month} title="Month" /></label>

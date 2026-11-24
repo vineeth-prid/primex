@@ -137,10 +137,12 @@ export default function JobCardForm() {
               <Field label="Mobile No *"><input className="input" {...field("mobile")} required type="tel" inputMode="tel" pattern="\+?[0-9\s\-]{7,20}" /></Field>
               <Field label="Plate No *"><input className="input uppercase" {...field("plateNo")} required autoComplete="off" /></Field>
               <Field label="Car Model *"><input className="input" {...field("carModel")} required /></Field>
+              <Field label="Chassis No"><input className="input uppercase" {...field("chassisNo")} autoComplete="off" maxLength={40} /></Field>
               <Field label="Address"><input className="input" {...field("address")} /></Field>
             </fieldset>
             <fieldset className="card grid gap-4">
               <Field label="Date In *"><input className="input" {...field("dateIn")} required type="date" /></Field>
+              <Field label="Delivery Date"><input className="input" {...field("deliveryDate")} type="date" min={d.f.dateIn} /></Field>
               <Field label="Time Car In *"><input className="input" {...field("timeIn")} required type="time" /></Field>
               <p className="text-sm text-neutral-500">Time Car Out is recorded at delivery.</p>
               <Field label="Type of Services"><input className="input" {...field("typeOfServices")} /></Field>

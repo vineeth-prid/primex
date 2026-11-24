@@ -66,26 +66,28 @@ export function renderJobCardPdf(input: PdfInput): Promise<Buffer> {
     .text(`Mob: ${SHOP.mobile}`, M + 370, y + 6, { width: W - 370, align: "right" })
     .text(SHOP.address, M + 370, y + 20, { width: W - 370, align: "right" });
   doc.font("Helvetica-Bold").fontSize(10).text(`No: ${card.jobCardNumber}`, M + 185, y + 44, { width: 160, align: "center" });
-  y += 64;
+  y += 60;
 
   // ── Customer / visit boxes ────────────────────────────────
   const half = (W - 12) / 2;
   const left: [string, string][] = [
     ["Customer Name:", card.customerName], ["Mobile No:", card.mobile], ["Plate No:", card.plateNo],
-    ["Car Model:", card.carModel], ["Address:", card.address ?? ""],
+    ["Car Model:", card.carModel], ["Chassis No:", card.chassisNo ?? ""], ["Address:", card.address ?? ""],
   ];
   const right: [string, string][] = [
-    ["Date In:", card.dateIn], ["Time Car In:", card.timeIn], ["Time Car Out:", card.timeOut ?? ""],
-    ["Type of Services:", card.typeOfServices ?? ""], ["Odometer Reading:", card.odometer?.toString() ?? ""],
+    ["Date In:", card.dateIn], ["Delivery Date:", card.deliveryDate ?? ""], ["Time Car In:", card.timeIn],
+    ["Time Car Out:", card.timeOut ?? ""], ["Type of Services:", card.typeOfServices ?? ""],
+    ["Odometer Reading:", card.odometer?.toString() ?? ""],
   ];
-  doc.roundedRect(M, y, half, 102, 6).lineWidth(0.8).stroke("#333");
-  doc.roundedRect(M + half + 12, y, half, 102, 6).stroke("#333");
-  left.forEach(([l, v], i) => field(M + 10, y + 10 + i * 18, half - 20, l, v));
-  right.forEach(([l, v], i) => field(M + half + 22, y + 10 + i * 18, half - 20, l, v));
-  y += 112;
+  const boxH = 10 + left.length * 17;
+  doc.roundedRect(M, y, half, boxH, 6).lineWidth(0.8).stroke("#333");
+  doc.roundedRect(M + half + 12, y, half, boxH, 6).stroke("#333");
+  left.forEach(([l, v], i) => field(M + 10, y + 9 + i * 17, half - 20, l, v));
+  right.forEach(([l, v], i) => field(M + half + 22, y + 9 + i * 17, half - 20, l, v));
+  y += boxH + 10;
 
   // ── Diagram + fuel + condition ────────────────────────────
-  const dw = 300, dh = dw * DIAGRAM_RATIO;
+  const dw = 285, dh = dw * DIAGRAM_RATIO;
   doc.image(DIAGRAM, M, y, { width: dw });
   for (const m of card.diagramMarks) {
     const cx = M + m.x * dw, cy = y + m.y * dh;
@@ -116,21 +118,21 @@ export function renderJobCardPdf(input: PdfInput): Promise<Buffer> {
   doc.font("Helvetica-Bold").fontSize(8).fill("#111")
     .text(`Fuel Level: ${card.fuelLevel != null ? FUEL_LEVELS[card.fuelLevel] : "—"}`, gx - 40, gy + 12, { width: 80, align: "center" });
 
-  let cy = y + 76;
+  let cy = y + 72;
   doc.font("Helvetica-Bold").fontSize(9).text("VEHICLE CONDITION AT CHECK-IN", rx, cy);
   doc.font("Helvetica").fontSize(7.5).text("(Please tick if any)", rx, cy + 11);
   cy += 24;
   const conds = card.conditions;
   const items: [boolean, string][] = [...CONDITIONS.map(([k, l]) => [!!conds[k], l] as [boolean, string]), [!!conds.other, `Other: ${conds.other ?? ""}`]];
   items.forEach(([on, label], i) => {
-    const iy = cy + i * 12.5;
+    const iy = cy + i * 12;
     doc.rect(rx, iy, 8, 8).lineWidth(0.7).stroke("#111");
     if (on) doc.moveTo(rx + 1.5, iy + 4).lineTo(rx + 3.5, iy + 6.5).lineTo(rx + 7, iy + 1.5).lineWidth(1.2).stroke("#d00");
     const opts = { width: rw - 14, lineBreak: false, ellipsis: true };
     if (hasArabic(label)) doc.font("ar").fontSize(8).fill("#111").text(label, rx + 12, iy - 3, { ...opts, ...RTL });
     else doc.font("Helvetica").fontSize(8.5).fill("#111").text(label, rx + 12, iy, opts);
   });
-  y = Math.max(hy + 14, cy + items.length * 12.5 + 4);
+  y = Math.max(hy + 14, cy + items.length * 12 + 4);
 
   // ── Notes ─────────────────────────────────────────────────
   for (const [title, val] of [
@@ -154,7 +156,7 @@ export function renderJobCardPdf(input: PdfInput): Promise<Buffer> {
   doc.font("Helvetica").fontSize(7.5);
   const textH = Math.max(ackText(TEXT.checkinText[lang], 0, 0, true), ackText(TEXT.deliveryText[lang], 0, 0, true));
   const rowsMax = 3;
-  const bh = 28 + textH + 6 + 40 + rowsMax * 14 + 8;
+  const bh = 28 + textH + 4 + 38 + rowsMax * 14 + 6;
   ensure(bh + 50);
   const ack = (x: number, n: string, title: string, body: string, rows: [string, string][], sig?: Buffer) => {
     doc.roundedRect(x, y, half, bh, 6).lineWidth(0.8).stroke("#333");
@@ -162,11 +164,11 @@ export function renderJobCardPdf(input: PdfInput): Promise<Buffer> {
     doc.fill("#fff").font("Helvetica-Bold").fontSize(9).text(n, x + 8, y + 11, { width: 14, align: "center" });
     doc.fill("#111").fontSize(8.5).text(title, x + 28, y + 11, { width: half - 36 });
     ackText(body, x + 8, y + 28);
-    const sy = y + 28 + textH + 6;
+    const sy = y + 28 + textH + 4;
     doc.font("Helvetica").fontSize(8.5).fill("#111").text("Customer Signature:", x + 8, sy + 26, { lineBreak: false });
     if (sig) doc.image(sig, x + 95, sy, { fit: [half - 105, 36] });
     doc.moveTo(x + 95, sy + 36).lineTo(x + half - 8, sy + 36).lineWidth(0.4).stroke("#999");
-    rows.forEach(([l, v], i) => field(x + 8, sy + 44 + i * 14, half - 16, l, v));
+    rows.forEach(([l, v], i) => field(x + 8, sy + 42 + i * 14, half - 16, l, v));
   };
   ack(M, "1", TEXT.checkinTitle.en, TEXT.checkinText[lang], [
     [`${TEXT.repName.en}:`, card.customerRepName],
